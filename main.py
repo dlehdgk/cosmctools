@@ -8,9 +8,7 @@ import equinox as eqx
 import sys
 from scipy.stats import genpareto
 from flax import serialization
-
-sys.path.append("./MCMC_Evidence/")
-from Cobaya_wrapper import *
+from .MCMC_Evidence.Cobaya_wrapper import *
 
 
 class cosmo_model:

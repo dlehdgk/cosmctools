@@ -10,9 +10,6 @@ Python implementation of the evidence estimation from MCMC chains with Cobaya
 #############################################################################################
 
 from __future__ import print_function
-import sys, os
-
-sys.path.insert(0, os.path.realpath(os.path.join(os.getcwd(), "..")))
 from getdist import plots, loadMCSamples, MCSamples
 import getdist
 import matplotlib.pyplot as plt
@@ -26,7 +23,7 @@ import numpy as np
 import logging
 import argparse
 import time
-from MCEvidence import get_prior_volume, MCEvidence
+from .MCEvidence import get_prior_volume, MCEvidence
 
 
 def BayesianEvidence(root, burnlen=0.3):
