@@ -89,8 +89,16 @@ class cosmo_model:
         """
         p = self.getdist_samples.getParams()
         # equation of the derived parameter here
-        Omega_b = p.omega_b / (p.H0 / 100) ** 2
-        self.getdist_samples.addDerived(Omega_b, name="Omega_b", label="\\Omega_b")
+        # Omega_b = p.omega_b / (p.H0 / 100) ** 2
+        # self.getdist_samples.addDerived(Omega_b, name="Omega_b", label="\\Omega_b")
+        if self.getdist_samples.getParamNames().hasParam("q_0") == False:
+            q0 = p.Omega_m * 3 / 2 - 1
+            self.getdist_samples.addDerived(q0, name="q0", label="q_0")
+        if self.getdist_samples.getParamNames().hasParam("rs_d_h") == False:
+            rs_d_h = p.rdrag * (p.H0 / 100)
+            self.getdist_samples.addDerived(
+                rs_d_h, name="rs_d_h", label="r_\mathrm{drag} h"
+            )
         return self
 
     def get_params(self, params=None, sigma=1):
