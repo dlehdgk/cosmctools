@@ -8,7 +8,7 @@ import equinox as eqx
 import sys
 from scipy.stats import genpareto
 from flax import serialization
-from MCMC_Evidence.Cobaya_wrapper import *
+from cosmctools.mcevidence.Cobaya_wrapper import *
 
 
 class cosmo_model:
@@ -213,13 +213,18 @@ class cosmo_model:
             chain["logpost"] = -1.0 * chain["minuslogpost"]
 
             # apply burnin based on cumulative weights
-            cumulative_weights = chain["weight"].cumsum()
-            total_steps = cumulative_weights.iloc[-1]
-            if verbose:
-                print(f"Total steps in chain {i + 1}: {total_steps}")
-            burnin_steps = int(total_steps * self.burnin)
-            start_index = (cumulative_weights >= burnin_steps).idxmax()
-            post_burnin = chain.iloc[start_index:]
+            # commenting out this section as getdist removes e.g. 30% of rows rather than 30% of steps. Therefore, for consistency, it must match what is done by getdist.
+            # cumulative_weights = chain["weight"].cumsum()
+            # total_steps = cumulative_weights.iloc[-1]
+            # if verbose:
+            #    print(f"Total steps in chain {i + 1}: {total_steps}")
+            # burnin_steps = int(total_steps * self.burnin)
+            # start_index = (cumulative_weights >= burnin_steps).idxmax()
+            # post_burnin = chain.iloc[start_index:]
+
+            # apply burnin matching getdist
+            burnin_index = int(round(len(chain) * self.burnin))
+            post_burnin = chain.iloc[burnin_index:].reset_index(drop=True)
 
             # expand by weight and add to harmonic chains
             weights = post_burnin["weight"].to_numpy().astype(int)
