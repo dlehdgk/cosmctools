@@ -12,7 +12,7 @@ from cosmctools.mcevidence.Cobaya_wrapper import *
 
 
 class cosmo_model:
-    def __init__(self, root, burnin=0.3, nchains=4, block_num=32):
+    def __init__(self, root, burnin=0.3, nchains=4, block_num=16):
         # base properties
         self.root = root
         self.burnin = burnin
@@ -38,7 +38,8 @@ class cosmo_model:
         ## properties of the flow model and evidence
         self._hm_model = None
         self._hm_evi = None
-        # self.hm_evidence_error = None
+        self._hm_evidence = None
+        self._hm_evidence_error = None
 
     # %% getdist
 
@@ -193,7 +194,7 @@ class cosmo_model:
 
     # %% Learned Harmonic Mean Estimator
 
-    def _load_hm_chains(self, verbose=False):
+    def _load_hm_chains(self):
         chains = hm.Chains(len(self.sampled_params))
         for i in range(self.nchains):
             with open(f"{self.root}.{i + 1}.txt", "r") as f:
@@ -204,11 +205,6 @@ class cosmo_model:
                 comment="#",
                 names=header,
             )
-            if verbose:
-                print(f"Chain {i + 1} loaded with shape: {chain.shape}")
-                print(f"Chain {i + 1} starts with:")
-                print(chain.head())
-
             # get log posterior
             chain["logpost"] = -1.0 * chain["minuslogpost"]
 
@@ -232,10 +228,11 @@ class cosmo_model:
             chain_array = post_burnin[self.sampled_params].to_numpy()
             expanded_chain = np.repeat(chain_array, weights, axis=0)
             expanded_logpost = np.repeat(logpost_array, weights, axis=0)
-            if verbose:
-                print(f"Chain {i + 1}: {len(expanded_chain)} samples after expansion")
             chains.add_chain(expanded_chain, expanded_logpost)
-        chains.split_into_blocks(self._block_num)
+        if self._block_num > self.nchains:
+            chains.split_into_blocks(self._block_num)
+        elif self._block_num < self.nchains:
+            raise ValueError("block_num is less than the number of chains.")
         return chains
 
     @property
@@ -378,14 +375,15 @@ class cosmo_model:
         """
         Get -lnZ and (lower, upper) errors on -lnZ
         """
-        if train_model:
-            self.train_model(**kwargs)
-        elif self._hm_model is None:
-            self.load_model(**kwargs)
-        evi = self._hm_evi_obj()
-        self.hm_evidence = evi.ln_evidence_inv
-        self.hm_evidence_error = evi.compute_ln_inv_evidence_errors()
-        return self.hm_evidence, self.hm_evidence_error
+        if self._hm_evidence is None:
+            if train_model:
+                self.train_model(**kwargs)
+            elif self._hm_model is None:
+                self.load_model(**kwargs)
+            self._hm_evi_obj()
+            self._hm_evidence = self._hm_evi.ln_evidence_inv
+            self._hm_evidence_error = self._hm_evi.compute_ln_inv_evidence_errors()
+        return self._hm_evidence, self._hm_evidence_error
 
     def check_evidence(self):
         lnk = self._hm_evi.ln_kurtosis
