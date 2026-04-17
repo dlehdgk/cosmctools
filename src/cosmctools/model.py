@@ -22,8 +22,21 @@ class cosmo_model:
         # properties for getdist
         self._getdist_samples = None
         self.display_params = None  # list of params to display using getdist (implement later for plots too)
-        self.chi2 = 0
-
+        self.chi2_map = 0
+        self.chi2_ml = 0
+        # list of dataset names. Add as required.
+        self._datasets = [
+            "chi2__bao.desi_dr2",
+            "chi2__sn.pantheonplus",
+            "chi2__planck_2018_lowl.TT",
+            "chi2__act_dr6_cmbonly.PlanckActCut",
+            "chi2__act_dr6_cmbonly.ACTDR6CMBonly",
+            "chi2__act_dr6_lenslike.ACTDR6LensLike",
+            "chi2__spt3g_d1_tne",
+            "chi2__muse3glike.cobaya.spt3g_2yr_delensed_ee_optimal_pp_muse",
+            "chi2__sn.desdovekie",
+            "chi2__sn.pantheonplusshoes",
+        ]
         # properties for MCEvidence
         self._mce_evidence = None
         self._mce_params = None
@@ -132,27 +145,14 @@ class cosmo_model:
         }
         return param_constraints
 
-    def get_chi2(self):
+    def get_chi2(self, map=True):
         """
-        Get -1/2 MAP ln likelihood = chi2_eff for minimised MCMC chains. Requires a .minimum file from a minimiser sampler in Cobaya. Add names of observations to list as required.
+        Get -1/2 MAP ln likelihood = chi2_eff for minimised MCMC chains. Requires a .minimum (map=True) or .bestfit (map=False) file from a minimiser sampler in Cobaya.
         """
-        bf = self.getdist_samples.getBestFit(max_posterior=True)
+        bf = self.getdist_samples.getBestFit(max_posterior=map)
         dict = bf.getParamDict()
-        # add names of chi2 for observations used
-        obs_list = [
-            "chi2__bao.desi_dr2",
-            "chi2__sn.pantheonplus",
-            "chi2__planck_2018_lowl.TT",
-            "chi2__act_dr6_cmbonly.PlanckActCut",
-            "chi2__act_dr6_cmbonly.ACTDR6CMBonly",
-            "chi2__act_dr6_lenslike.ACTDR6LensLike",
-            "chi2__spt3g_d1_tne",
-            "chi2__muse3glike.cobaya.spt3g_2yr_delensed_ee_optimal_pp_muse",
-            "chi2__sn.desdovekie",
-            "chi2__sn.pantheonplusshoes",
-        ]
         self.chi2 = 0
-        for data in obs_list:
+        for data in self._datasets:
             if data in dict:
                 self.chi2 += dict[data]
         return self.chi2
@@ -166,6 +166,54 @@ class cosmo_model:
         delta_chi2 = chi2_2 - chi2_1
         # print(rf"$\Delta \chi^2$: {delta_chi2:.3f}")
         return delta_chi2
+
+    def get_AIC(self):
+        """
+        Getting the Akaike Information Criterion (AIC) for this model. AIX = chi2_ML + 2k. Requires a .bestfit file from a minimiser sampler in Cobaya.
+        """
+        if self.sampled_params is None:
+            raise ValueError("Please set sampled_params first.")
+        else:
+            k = len(self.sampled_params)
+        aic = self.get_chi2(map=False) + 2 * k
+        return aic
+
+    def get_DIC(self, method="alt", user_chi2=None):
+        """
+        Getting the Deviance Information Criterion (DIC) for this model.
+        method refers to the method of obtaining the Bayesian complexity.
+        alt: using the alternative definition in BDA3 by Gelman et al. 2013 p_D = 2var(lnL) = 1/2*var(chi2(theta)).
+        liddle: using the method in Liddle 2007 where the likelihood at the posterior mean is estimated by the MCMC point with parameter values closest to the posterior mean.
+        user: takes the user input of the deviance at the mean. Requires that the user uses the evaluate sampler in Cobaya to obtain the likelihood at the posterior mean.
+        DIC = chi2(E(theta)) + 2p_D = E(chi2(theta))+p_D
+        if not using alt, p_D = E(chi2(theta)) - chi2(E(theta)) which requires the evaluation of the likelihood at the posterior mean.
+        """
+        mean_chi2 = self.getdist_samples.mean("chi2")
+        if method == "alt":
+            # get the mean and variance of chi2 from chains (check if this can be done in getdist? If not remember to weight correctly). Use DIC = E(chi2)+1/2*var(chi2) to compute DIC.
+            var_chi2 = self.getdist_samples.var("chi2")
+            p_D = 0.5 * var_chi2
+            dic = mean_chi2 + p_D
+
+        elif method == "liddle":
+            # get the posterior mean from getdist. Find the mean of the chi2 from the chains (check if this can be done in getdist). Find the point in the chains closest to the posterior mean of the parameters and get the chi2 at this point. p_D = mean of chi2 - chi2 at mean. DIC = mean of chi2 + p_D.
+            placeholder = 0
+
+        elif method == "user":
+            if user_chi2 is None:
+                raise ValueError(
+                    "Please provide the chi2 at the posterior mean for this model."
+                )
+            else:
+                chi2_at_mean = user_chi2
+            # get the mean of chi2 from the chains (check if this can be done in getdist?). p_D = mean of chi2 - chi2 at mean. DIC = chi2 at mean + 2*p_D.
+            p_D = mean_chi2 - chi2_at_mean
+            dic = chi2_at_mean + 2 * p_D
+        else:
+            raise ValueError(
+                "Method not recognised. Please choose alt, liddle or user."
+            )
+        return dic
 
     # %% MCEvidence
 
@@ -391,7 +439,7 @@ class cosmo_model:
         print(f"ln kurtosis: {lnk:.4f} (>>1 implies evidence may be unreliable)")
         return self
 
-    def get_LMHE_bayes_factor(self, alternative_model, **kwargs):
+    def get_LHME_bayes_factor(self, alternative_model, **kwargs):
         """
         Returning the Bayes factor between this model and an alternative using Harmonic. > 0 implies the alternative model is favoured, < 0 implies this model is favoured.
         """
