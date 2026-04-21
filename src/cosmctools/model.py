@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import harmonic as hm
 import harmonic.utils as utils
-import equinox as eqx
+import yaml
 import sys
 from scipy.stats import genpareto
 from flax import serialization
@@ -183,22 +183,16 @@ class cosmo_model:
         Getting the Deviance Information Criterion (DIC) for this model.
         method refers to the method of obtaining the Bayesian complexity.
         alt: using the alternative definition in BDA3 by Gelman et al. 2013 p_D = 2var(lnL) = 1/2*var(chi2(theta)).
-        liddle: using the method in Liddle 2007 where the likelihood at the posterior mean is estimated by the MCMC point with parameter values closest to the posterior mean.
         user: takes the user input of the deviance at the mean. Requires that the user uses the evaluate sampler in Cobaya to obtain the likelihood at the posterior mean.
+        read: assumes that one has run the evaluate_at_mean() function which creates a .posterior_mean.1.txt file containing the evaluation of the likelihood at the posterior mean. This reads the chi2 at the posterior mean from this file. Following the definition of p_D in Liddle 2007.
         DIC = chi2(E(theta)) + 2p_D = E(chi2(theta))+p_D
         if not using alt, p_D = E(chi2(theta)) - chi2(E(theta)) which requires the evaluation of the likelihood at the posterior mean.
         """
         mean_chi2 = self.getdist_samples.mean("chi2")
         if method == "alt":
-            # get the mean and variance of chi2 from chains (check if this can be done in getdist? If not remember to weight correctly). Use DIC = E(chi2)+1/2*var(chi2) to compute DIC.
             var_chi2 = self.getdist_samples.var("chi2")
             p_D = 0.5 * var_chi2
             dic = mean_chi2 + p_D
-
-        elif method == "liddle":
-            # get the posterior mean from getdist. Find the mean of the chi2 from the chains (check if this can be done in getdist). Find the point in the chains closest to the posterior mean of the parameters and get the chi2 at this point. p_D = mean of chi2 - chi2 at mean. DIC = mean of chi2 + p_D.
-            placeholder = 0
-
         elif method == "user":
             if user_chi2 is None:
                 raise ValueError(
@@ -206,7 +200,23 @@ class cosmo_model:
                 )
             else:
                 chi2_at_mean = user_chi2
-            # get the mean of chi2 from the chains (check if this can be done in getdist?). p_D = mean of chi2 - chi2 at mean. DIC = chi2 at mean + 2*p_D.
+            p_D = mean_chi2 - chi2_at_mean
+            dic = chi2_at_mean + 2 * p_D
+        elif method == "read":
+            try:
+                with open(f"{self.root}.posterior_mean.1.txt", "r") as f:
+                    header = f.readline().strip().lstrip("#").split()
+                chain = pd.read_csv(
+                    f"{self.root}.posterior_mean.1.txt",
+                    sep=r"\s+",
+                    comment="#",
+                    names=header,
+                )
+                chi2_at_mean = chain["chi2"]
+            except FileNotFoundError:
+                raise FileNotFoundError(
+                    ".posterior_mean.1.txt file not found. Please run evaluate_at_mean() first to create this file."
+                )
             p_D = mean_chi2 - chi2_at_mean
             dic = chi2_at_mean + 2 * p_D
         else:
@@ -214,6 +224,44 @@ class cosmo_model:
                 "Method not recognised. Please choose alt, liddle or user."
             )
         return dic
+
+    def evaluate_at_mean(self):
+        """
+        Function to evaluate the likelihood at the posterior mean. Run this function once after convergence of chains (in the same environment where the MCMC was being performed). This will create a .posterior_mean file which can be read to obtain the chi2 at the posterior mean for DIC calculations.
+        """
+        # get the names of sampled parameters
+        if self.sampled_params is None:
+            raise ValueError("Please set sampled_params first.")
+        mean_params = self.getdist_samples.getMeans(self.sampled_params)
+        mean_params_dict = {
+            param: mean_params[i] for i, param in enumerate(self.sampled_params)
+        }
+
+        # reading input.yaml to get the original inputs for the MCMC run
+        with open(f"{self.root}.input.yaml") as f:
+            input_yaml = yaml.safe_load(f)
+
+        output_loc = self.root + ".posterior_mean"
+        input_yaml["sampler"] = {"evaluate": {"override": mean_params_dict}}
+        input_yaml["output"] = output_loc
+        input_yaml["resume"] = False
+        input_yaml["force"] = True
+
+        evaluate_yaml = output_loc + ".yaml"
+        with open(evaluate_yaml, "w") as f:
+            yaml.safe_dump(input_yaml, f, sort_keys=False)
+
+        # import cobaya and run the evaluation
+        try:
+            from cobaya import run
+        except ImportError:
+            raise ImportError(
+                "Cobaya is not installed. Please install Cobaya to use this function."
+            )
+        updated_info, sampler = run(evaluate_yaml)
+        sample = sampler.products()["sample"]
+        chi2 = float(sample.data["chi2"])
+        return chi2
 
     # %% MCEvidence
 
