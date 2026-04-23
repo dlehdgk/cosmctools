@@ -113,6 +113,9 @@ class cosmo_model:
             self.getdist_samples.addDerived(
                 rs_d_h, name="rs_d_h", label="r_\mathrm{drag} h"
             )
+        if self.getdist_samples.getParamNames().hasParam("H_dS") == False:
+            H_dS = p.H0 * np.sqrt(p.Omega_Lambda)
+            self.getdist_samples.addDerived(H_dS, name="H_dS", label="\overline{H}")
         return self
 
     def get_params(self, params=None, sigma=1):
