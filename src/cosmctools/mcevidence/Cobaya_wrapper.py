@@ -17,7 +17,6 @@ import yaml
 from scipy.stats import norm
 import IPython
 from matplotlib import rc
-import seaborn as sns
 import pandas as pd
 import numpy as np
 import logging
