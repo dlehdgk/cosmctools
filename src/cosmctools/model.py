@@ -237,7 +237,7 @@ class cosmo_model:
         if self.sampled_params is None:
             raise ValueError("Please set sampled_params first.")
         mean_params = {
-            name: self.getdist_samples.mean(name) for name in self.sampled_params
+            name: float(self.getdist_samples.mean(name)) for name in self.sampled_params
         }
 
         # reading input.yaml to get the original inputs for the MCMC run
