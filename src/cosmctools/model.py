@@ -229,7 +229,9 @@ class cosmo_model:
 
     def evaluate_at_mean(self, theory_path=None):
         """
-        Function to evaluate the likelihood at the posterior mean. Run this function once after convergence of chains (in the same environment where the MCMC was being performed). This will create a .posterior_mean file which can be read to obtain the chi2 at the posterior mean for DIC calculations.
+        Function to evaluate the likelihood at the posterior mean. Run this function once after convergence of chains. This will create a .posterior_mean file which can be read to obtain the chi2 at the posterior mean for DIC calculations.
+
+        theory_path: override the `path` entry of the theory block in the original input.yaml (e.g., to point at a local CAMB/CLASS install when the MCMC was run on an HPC with a different path).
         """
         # get the names of sampled parameters
         if self.sampled_params is None:
@@ -244,9 +246,11 @@ class cosmo_model:
             input_yaml = yaml.safe_load(f)
 
         output_loc = self.root + ".posterior_mean"
-        input_yaml["theory"] = (
-            {"override": theory_path} if theory_path else input_yaml["theory"]
-        )
+
+        if theory_path is not None:
+            theory_name = next(iter(input_yaml["theory"]))
+            input_yaml["theory"][theory_name]["path"] = theory_path
+
         input_yaml["sampler"] = {"evaluate": {"override": mean_params_dict}}
         input_yaml["output"] = output_loc
         input_yaml["resume"] = False
