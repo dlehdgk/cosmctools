@@ -236,9 +236,8 @@ class cosmo_model:
         # get the names of sampled parameters
         if self.sampled_params is None:
             raise ValueError("Please set sampled_params first.")
-        mean_params = self.getdist_samples.getMeans(self.sampled_params)
-        mean_params_dict = {
-            param: mean_params[i] for i, param in enumerate(self.sampled_params)
+        mean_params = {
+            name: self.getdist_samples.mean(name) for name in self.sampled_params
         }
 
         # reading input.yaml to get the original inputs for the MCMC run
@@ -251,7 +250,7 @@ class cosmo_model:
             theory_name = next(iter(input_yaml["theory"]))
             input_yaml["theory"][theory_name]["path"] = theory_path
 
-        input_yaml["sampler"] = {"evaluate": {"override": mean_params_dict}}
+        input_yaml["sampler"] = {"evaluate": {"override": mean_params}}
         input_yaml["output"] = output_loc
         input_yaml["resume"] = False
         input_yaml["force"] = True
