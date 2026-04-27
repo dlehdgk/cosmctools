@@ -268,7 +268,7 @@ class cosmo_model:
             )
         updated_info, sampler = run(evaluate_yaml)
         sample = sampler.products()["sample"]
-        chi2 = float(sample.data["chi2"])
+        chi2 = float(sample.data["chi2"][0])
         return chi2
 
     # %% MCEvidence
