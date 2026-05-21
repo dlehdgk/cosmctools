@@ -93,6 +93,8 @@ cosmo_params_list = [
     "logA",
     "ns",
     "H0",
+    "h",
+    "Omega_m",
     "z_qcd",
     "Dz_qcd",
     "Tcal",
@@ -954,10 +956,8 @@ class MCEvidence(object):
         ChainCov = np.cov(s.T)
         eigenVal, eigenVec = np.linalg.eig(ChainCov)
         if (eigenVal < 0).any():
-            self.logger.warn(
-                """Some of the eigenvalues of the 
-                covariance matrix are negative and/or complex:"""
-            )
+            self.logger.warn("""Some of the eigenvalues of the 
+                covariance matrix are negative and/or complex:""")
             for i, e in enumerate(eigenVal):
                 print("Eigenvalue Param_{} = {}".format(i, e))
             # no diagonalisation
@@ -1496,10 +1496,8 @@ def get_prior_volume(args, **kwargs):
                 """Error in reading cosmomc *.ranges or montepython log.param files. 
 These files are needed to compute prior volume"""
             )
-            logger.info(
-                """If you choose to proceed with prior_volume=1, 
-using the estimated evidence for model comparison will be incrporate the prior ratio"""
-            )
+            logger.info("""If you choose to proceed with prior_volume=1, 
+using the estimated evidence for model comparison will be incrporate the prior ratio""")
 
             if query_yes_no(
                 "Do you want to proceed by setting prior_volume=1?", default="yes"
