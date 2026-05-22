@@ -5,7 +5,6 @@ import pandas as pd
 import harmonic as hm
 import harmonic.utils as utils
 import yaml
-from scipy.stats import genpareto
 from flax import serialization
 from cosmctools.mcevidence.Cobaya_wrapper import *
 
@@ -159,7 +158,7 @@ class cosmo_model:
                 self.chi2 += dict[data]
         return self.chi2
 
-    def Delta_chi2(self, alternative_model):
+    def get_Delta_chi2(self, alternative_model):
         """
         returning the difference in chi2 between this model and an alternative model. < 0 implies alternative model is favoured, > 0 implies this model is favoured.
         """
@@ -276,7 +275,7 @@ class cosmo_model:
     @property
     def mcevidence(self):
         """
-        computes an estimate for the Bayesian Evidence from chais using the set self.sampled_params.
+        computes an estimate for the Bayesian Evidence from chains using the set self.sampled_params.
         """
         if self._mce_params is None:
             raise ValueError("Please set sampled_params first.")
@@ -392,10 +391,10 @@ class cosmo_model:
             flow_samples = self._hm_model.sample(self.hm_chains.nsamples)
             utils.plot_getdist_compare(self.hm_chains.samples, flow_samples)
             plt.show()
-            print("ensure that the concentrated flow is contained within the posterior")
+            self.diagnose_flow()
         return self
 
-    def load_model(self, temp=0.9, training_proportion=0.5):
+    def load_model(self, temp=0.8, training_proportion=0.5):
         """
         load trained flow model.
         """
@@ -441,10 +440,11 @@ class cosmo_model:
         self,
         training_proportion=0.5,
         epochs=15,
-        temp=0.9,
+        temp=0.8,
         n_layers=3,
         n_bins=128,
         verbose=False,
+        store_model=True,
     ):
         """
         Training the RQSpline model for the Learned Harmonic Mean Estimator using the MCMC chains.
@@ -465,8 +465,9 @@ class cosmo_model:
             flow_samples = self._hm_model.sample(self.hm_chains.nsamples)
             utils.plot_getdist_compare(self.hm_chains.samples, flow_samples)
             plt.show()
-            print("ensure that the concentrated flow is contained within the posterior")
-        self.store_model()
+            self.diagnose_flow()
+        if store_model:
+            self.store_model()
         return self
 
     def _hm_evi_obj(self):
@@ -477,7 +478,9 @@ class cosmo_model:
 
     def get_hm_evidence(self, train_model=False, **kwargs):
         """
-        Get -lnZ and (lower, upper) errors on -lnZ
+        Get ln(Z) and (lower, upper) errors on ln(Z).
+
+        ln Z = -ln rho + ln(1 + sigma^2 / rho^2)
         """
         if self._hm_evidence is None:
             if train_model:
@@ -485,87 +488,165 @@ class cosmo_model:
             elif self._hm_model is None:
                 self.load_model(**kwargs)
             self._hm_evi_obj()
-            self._hm_evidence = self._hm_evi.ln_evidence_inv
-            self._hm_evidence_error = self._hm_evi.compute_ln_inv_evidence_errors()
+
+            ln_rho = self._hm_evi.ln_evidence_inv
+            ln_var = self._hm_evi.ln_evidence_inv_var
+            ln_Z = np.log1p(np.exp(ln_var - 2.0 * ln_rho)) - ln_rho
+
+            # harmonic returns (err_neg, err_pos) on ln(1/Z); flip to (lower, upper) on ln Z
+            err_neg, err_pos = self._hm_evi.compute_ln_inv_evidence_errors()
+            err_lower, err_upper = abs(err_pos), abs(err_neg)
+
+            self._hm_evidence = ln_Z
+            self._hm_evidence_error = (err_lower, err_upper)
         return self._hm_evidence, self._hm_evidence_error
 
-    def check_evidence(self):
-        lnk = self._hm_evi.ln_kurtosis
-        print("=== Checking Reliability of Evidence ===")
-        print(f"ln kurtosis: {lnk:.4f} (>>1 implies evidence may be unreliable)")
-        return self
+    def diagnose_flow(self, quantile=0.005, n_flow_samples=20000):
+        """
+        Quick reliability check on the trained flow as an LHME target distribution.
+
+        Returns a dict with two numbers:
+          - flow_in_posterior: fraction of flow samples that fall inside the
+            posterior's per-dimension [quantile, 1-quantile] quantile box.
+            Want ~1; values well below indicate the flow leaks outside the
+            posterior support and the evidence will be biased.
+
+          - val_train_nll_gap: mean(-ln_phi) on inference minus on training.
+            Positive and large => flow has overfit the training split.
+        """
+        if self.inference is None or self._hm_model is None:
+            raise ValueError("Please run train_model() or load_model() first.")
+
+        post = np.asarray(self.hm_chains.samples)
+        lo = np.quantile(post, quantile, axis=0)
+        hi = np.quantile(post, 1.0 - quantile, axis=0)
+        flow = np.asarray(self._hm_model.sample(n_flow_samples))
+        inside = np.all((flow >= lo) & (flow <= hi), axis=1)
+        flow_in_posterior = float(np.mean(inside))
+
+        log_phi_inf = np.asarray(self._hm_model.predict(self.inference.samples)).ravel()
+        log_phi_train = np.asarray(
+            self._hm_model.predict(self.training.samples)
+        ).ravel()
+        val_nll = float(-np.mean(log_phi_inf))
+        train_nll = float(-np.mean(log_phi_train))
+        gap = val_nll - train_nll
+
+        print("=== Flow Diagnostics ===")
+        print(
+            f"Flow in posterior box (q={quantile}): {flow_in_posterior:.3f} "
+            "(want ~1; low => flow leaks outside posterior)"
+        )
+        print(
+            f"Val - Train NLL gap:                  {gap:+.3f} "
+            "(large positive => overfitting)"
+        )
+        return {
+            "flow_in_posterior": flow_in_posterior,
+            "val_train_nll_gap": gap,
+            "val_nll": val_nll,
+            "train_nll": train_nll,
+        }
+
+    def diagnose_evidence(self, temps=(0.7, 0.75, 0.8, 0.85)):
+        """
+        Optional LHME reliability check. Recomputes lnZ at multiple
+        temperatures using the same trained flow and reports two diagnostics:
+
+          - Temperature consistency (primary). For a flow contained in the
+            posterior, varying T in (0, 1] must leave lnZ unchanged up to
+            Monte Carlo noise (Polanska et al. 2024). The spread across temps
+            relative to the formal error is the leakage signal:
+
+          - kurtosis per T (heavy-tail check on importance weights, from
+            harmonic's evi.kurtosis). Gaussian baseline is 3 — fat-tailed
+            weights signal flow tails extending outside posterior support.
+
+        Restores the original temperature and cached evidence on exit so
+        subsequent get_hm_evidence() calls return the previous result.
+
+        Returns a dict with:
+          - lnZ_by_temp:      {T: lnZ}
+          - err_by_temp:      {T: formal error}
+          - kurtosis_by_temp: {T: kurtosis}
+          - spread:           max(lnZ) - min(lnZ) across temps
+          - typical_err:      mean formal error across temps
+          - ratio:            spread / typical_err
+        """
+        if self._hm_model is None:
+            raise ValueError("Please run train_model() or load_model() first.")
+
+        orig_temp = self._hm_model.temperature
+        orig_evi = self._hm_evi
+        orig_lnZ = self._hm_evidence
+        orig_err = self._hm_evidence_error
+
+        lnZ_by_temp = {}
+        err_by_temp = {}
+        kurtosis_by_temp = {}
+        try:
+            for T in temps:
+                self._hm_model.temperature = float(T)
+                self._hm_evi = None
+                self._hm_evidence = None
+                self._hm_evidence_error = None
+                lnZ, (lo, up) = self.get_hm_evidence()
+                lnZ_by_temp[float(T)] = lnZ
+                err_by_temp[float(T)] = 0.5 * (lo + up)
+                kurtosis_by_temp[float(T)] = float(self._hm_evi.kurtosis)
+        finally:
+            self._hm_model.temperature = orig_temp
+            self._hm_evi = orig_evi
+            self._hm_evidence = orig_lnZ
+            self._hm_evidence_error = orig_err
+
+        vals = np.array(list(lnZ_by_temp.values()))
+        spread = float(vals.max() - vals.min())
+        typical_err = float(np.mean(list(err_by_temp.values())))
+        ratio = spread / typical_err if typical_err > 0 else np.inf
+
+        print("=== Evidence Diagnostics ===")
+        for T in lnZ_by_temp:
+            print(
+                f"  T={T:.2f}: lnZ = {lnZ_by_temp[T]:+.4f} "
+                f"+/- {err_by_temp[T]:.4f}  "
+                f"(kurtosis: {kurtosis_by_temp[T]:.2f})"
+            )
+        print(f"Spread (max-min):      {spread:.4f}")
+        print(f"Typical formal error:  {typical_err:.4f}")
+        print(f"Spread / error:        {ratio:.2f} ")
+        print(
+            "Kurtosis per T: ~3 Gaussian, large Kurtosis may indicate that the variance estimate is dominated by outliers."
+        )
+
+        return {
+            "lnZ_by_temp": lnZ_by_temp,
+            "err_by_temp": err_by_temp,
+            "kurtosis_by_temp": kurtosis_by_temp,
+            "spread": spread,
+            "typical_err": typical_err,
+            "ratio": ratio,
+        }
 
     def get_LHME_bayes_factor(self, alternative_model, **kwargs):
         """
-        Returning the Bayes factor between this model and an alternative using Harmonic. > 0 implies the alternative model is favoured, < 0 implies this model is favoured.
+        Returning the Bayes factor between this model and an alternative using Harmonic.
+        > 0 implies the alternative model is favoured, < 0 implies this model is favoured.
+
+        Computed from the bias-corrected ln Z of each model so the BF is self-consistent
+        with the values returned by get_hm_evidence. This differs from harmonic's
+        compute_ln_bayes_factor by a sub-0.001 symmetrisation term (it applies the
+        Taylor bias correction to both models rather than only the ratio-denominator).
         """
-        evidence1, evidence1_err = self.get_hm_evidence(**kwargs)
-        evidence2, evidence2_err = alternative_model.get_hm_evidence(**kwargs)
+        lnZ_self, (self_err_lower, self_err_upper) = self.get_hm_evidence(**kwargs)
+        lnZ_alt, (alt_err_lower, alt_err_upper) = alternative_model.get_hm_evidence(
+            **kwargs
+        )
 
-        # as harmonic gives -lnZ flip the order of subtraction
-        bayes_factor = evidence1 - evidence2
+        bayes_factor = lnZ_alt - lnZ_self
 
-        # flip upper and lower errors to get errors for lnZ
-        e1_err_lower, e1_err_upper = abs(evidence1_err[1]), abs(evidence1_err[0])
-        e2_err_lower, e2_err_upper = abs(evidence2_err[1]), abs(evidence2_err[0])
+        # For ln(Z_alt / Z_self): upper bound is alt up & self down; lower bound is the reverse.
+        err_upper = np.sqrt(alt_err_upper**2 + self_err_lower**2)
+        err_lower = np.sqrt(alt_err_lower**2 + self_err_upper**2)
 
-        # Upper error of result mixes E2's upper and E1's lower
-        err_upper = np.sqrt(e2_err_upper**2 + e1_err_lower**2)
-
-        # Lower error of result mixes E2's lower and E1's upper
-        err_lower = np.sqrt(e2_err_lower**2 + e1_err_upper**2)
-
-        # print(
-        #    rf"$\ln\mathcal{{Z}}_\mathrm{{LHME}}$: {bayes_factor:.3f} + {err_upper:.3f} / - {err_lower:.3f}"
-        # )
-
-        # Returning a tuple containing the Bayes factor and its asymmetric error bounds
         return bayes_factor, err_lower, err_upper
-
-    def check_harmonic_diagnostics(self):
-        """
-        Checks if the trained flow is strictly contained within the posterior
-        by analyzing the importance weights of the inference chains.
-        """
-        if self.inference is None or self._hm_model is None:
-            raise ValueError("Please run get_hm_evidence() or train_model() first.")
-
-        # Evaluate log target density
-        log_phi = self._hm_model.predict(self.inference.samples)
-
-        if log_phi.ndim > 1:
-            log_phi = log_phi.flatten()
-
-        log_posterior = self.inference.ln_posterior
-        if log_posterior.ndim > 1:
-            log_posterior = log_posterior.flatten()
-
-        # Calculate the log weights
-        log_weights = log_phi - log_posterior
-
-        # Convert to linear weights safely
-        weights = np.exp(log_weights - np.max(log_weights))
-
-        # Kish's Effective Sample Size
-        ess = np.sum(weights) ** 2 / np.sum(weights**2)
-        fractional_ess = ess / len(weights)
-
-        # Pareto-k Diagnostic
-        tail_thres = np.percentile(weights, 80)
-        tail_weights = weights[weights > tail_thres]
-
-        shifted_tail = tail_weights - tail_thres
-        k, *_ = genpareto.fit(shifted_tail, floc=0)
-
-        print("=== Harmonic Estimator Diagnostics ===")
-        print(f"Fractional ESS:      {fractional_ess:.4f} (Higher is better)")
-        print(f"Pareto-k Diagnostic: {k:.4f} (Less than 0.7 required)")
-
-        if k > 0.7:
-            print("Pareto-k > 0.7. Evidence is unreliable.")
-        elif k < 0.5:
-            print("Pareto-k < 0.5. The Evidence is likely to be reliable.")
-        else:
-            print("0.5 < Pareto-k < 0.7. May wish to adjust temperature and epochs.")
-
-        return self
