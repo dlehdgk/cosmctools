@@ -40,7 +40,7 @@ This is package is essentially an umbrella wrapper for multiple cosmology codes,
 - Compute the AIC ([H. Akaike 1974](https://ieeexplore.ieee.org/document/1100705)) and DIC ([D. Spiegelhalter et al. 2002](https://academic.oup.com/jrsssb/article-abstract/64/4/583/7098621) and A. Gelman et al. 2013,
 Bayesian Data Analysis, Third Edition, Section 7) of models using the `get_chi2()` function (requires that a minimizer has already been run).
 
-    - For the method described in Spiegelhalter et al. 2002, also requires that `cobaya` has also been installed in the environment to run an evaluation of the likelihood at the posterior mean.
+    - For the method described in Spiegelhalter et al. 2002, also requires that `Cobaya` has also been installed in the environment to run an evaluation of the likelihood at the posterior mean.
 
 - Estimate Bayesian evidence using `MCEvidence` ([A. Heavens et al. 2017](https://arxiv.org/abs/1704.03472) using the wrapper for `Cobaya` chains written by [W. Giarè](https://github.com/williamgiare/wgcosmo/tree/main/statistics/MCMC_Evidence)) through the function `get_MCE_bayes_factor()`
 
