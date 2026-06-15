@@ -60,7 +60,7 @@ If there are additional derived parameters which were not tracked in the samplin
 
 You must run `set_sampled_params()` prior to attempting to obtain bayesian evidence.
 
-- If there is a prior without finite bounds (e.g. Gaussian prior), you can either set bounds manually using `"param_name":<min>/<max>` or define a confidence level using `"param_name";<condifence level>` (e.g. 0.9999995 for 5 sigmas of the prior).
+- If there is a prior without finite bounds (e.g. Gaussian prior), you can either set bounds manually using `"param_name":<min>/<max>` or define a confidence level using `"param_name";<confidence level>` (e.g. 0.9999995 for 5 sigmas of the prior).
 
     - Note that the prior bounds are only required for `MCEvidence`.
 
