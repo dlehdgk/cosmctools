@@ -10,7 +10,7 @@ from cosmctools.mcevidence.Cobaya_wrapper import *
 
 
 class cosmo_model:
-    def __init__(self, root, burnin=0.3, nchains=4, block_num=16):
+    def __init__(self, root, burnin=0.3, nchains=4, block_num=None):
         # base properties
         self.root = root
         self.burnin = burnin
@@ -332,10 +332,13 @@ class cosmo_model:
             expanded_chain = np.repeat(chain_array, weights, axis=0)
             expanded_logpost = np.repeat(logpost_array, weights, axis=0)
             chains.add_chain(expanded_chain, expanded_logpost)
-        if self._block_num > self.nchains:
+        if self._block_num is not None and self._block_num < self.nchains:
+            raise ValueError(
+                f"block_num ({self._block_num}) is less than the number of chains ({self.nchains})."
+            )
+
+        if self._block_num is not None and self._block_num > self.nchains:
             chains.split_into_blocks(self._block_num)
-        elif self._block_num < self.nchains:
-            raise ValueError("block_num is less than the number of chains.")
         return chains
 
     @property
@@ -632,11 +635,6 @@ class cosmo_model:
         """
         Returning the Bayes factor between this model and an alternative using Harmonic.
         > 0 implies the alternative model is favoured, < 0 implies this model is favoured.
-
-        Computed from the bias-corrected ln Z of each model so the BF is self-consistent
-        with the values returned by get_hm_evidence. This differs from harmonic's
-        compute_ln_bayes_factor by a sub-0.001 symmetrisation term (it applies the
-        Taylor bias correction to both models rather than only the ratio-denominator).
         """
         lnZ_self, (self_err_lower, self_err_upper) = self.get_hm_evidence(**kwargs)
         lnZ_alt, (alt_err_lower, alt_err_upper) = alternative_model.get_hm_evidence(
