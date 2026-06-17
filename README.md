@@ -8,7 +8,7 @@ for `pip`:
 
 ```bash
 git clone https://github.com/dlehdgk/cosmctools.git
-pip install -e cosmctools
+pip install -e ./cosmctools
 ```
 
 for `uv`, recommended that you create a new environment for this package:
