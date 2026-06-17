@@ -16,7 +16,7 @@ for `uv`, recommended that you create a new environment for this package:
 ```bash
 uv init
 git clone https://github.com/dlehdgk/cosmctools.git
-uv add --editable cosmctools
+uv add --editable ./cosmctools
 ```
 
 It is recommended that you install this package in editable mode as you may wish to modify the code for your specific choice of models and datasets.
