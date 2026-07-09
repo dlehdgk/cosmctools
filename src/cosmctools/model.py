@@ -631,7 +631,7 @@ class cosmo_model:
             "ratio": ratio,
         }
 
-    def get_LHME_bayes_factor(self, alternative_model, **kwargs):
+    def get_hm_bayes_factor(self, alternative_model, **kwargs):
         """
         Returning the Bayes factor between this model and an alternative using Harmonic.
         > 0 implies the alternative model is favoured, < 0 implies this model is favoured.

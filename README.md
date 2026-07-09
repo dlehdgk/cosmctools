@@ -137,5 +137,5 @@ MCE_bayes_factor = lcdm.get_MCE_bayes_factor(cpl)
 #### LHME
 
 # by default, once the model is trained, it will be saved with the same file root as the chains. Once it has been trained, having `train_model=False` (default) will attempt to load the saved model automatically.
-LHME_bayes_factor = lcdm.get_LHME_bayes_factor(cpl, train_model=True)
+hm_bayes_factor = lcdm.get_hm_bayes_factor(cpl, train_model=True)
 ```
