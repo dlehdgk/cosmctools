@@ -132,7 +132,7 @@ delta_dic = cpl.get_DIC() - lcdm.get_DIC()
 
 #### MCEvidence
 
-MCE_bayes_factor = lcdm.get_MCE_bayes_factor(cpl)
+MCE_bayes_factor = lcdm.get_hm_bayes_factor(cpl)
 
 #### LHME
 
