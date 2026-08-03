@@ -46,7 +46,7 @@ Bayesian Data Analysis, Third Edition, Section 7) of models using the `get_chi2(
 
     - **Not Yet Implemented**: cleaning up the wrapper to be more consistent with the rest of the package.
 
-- Estimate Bayesian evidence using the Learnt Harmonic Mean Estimator (LHME) method using [harmonic](https://github.com/astro-informatics/harmonic) ([J. McEwen et al. 2021](https://arxiv.org/abs/2111.12720)) through the function `get_LHME_bayes_factor()`
+- Estimate Bayesian evidence using the Learnt Harmonic Mean Estimator (LHME) method using [harmonic](https://github.com/astro-informatics/harmonic) ([J. McEwen et al. 2021](https://arxiv.org/abs/2111.12720)) through the function `get_hm_bayes_factor()`
 
     - Uses the normalising flow model for the target density as described in [A. Polanska et al. 2024](https://arxiv.org/abs/2405.05969).
 
