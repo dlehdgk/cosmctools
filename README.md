@@ -1,4 +1,6 @@
-# Package for Cosmological model comparison (and others) from Cobaya MCMC chains
+# Cosmological Chain Analysis Tools (CosmoCAT)
+
+This is a Python module for analysing Cobaya generated MCMC chains for cosmological inference and model comparisons.
 
 ## Installation
 
@@ -7,16 +9,16 @@ Clone this repository and install using `pip` or `uv` (recommended)
 for `pip`:
 
 ```bash
-git clone https://github.com/dlehdgk/cosmctools.git
-pip install -e ./cosmctools
+git clone https://github.com/dlehdgk/CosmoCAT.git
+pip install -e ./CosmoCAT
 ```
 
 for `uv`, recommended that you create a new environment for this package:
 
 ```bash
 uv init
-git clone https://github.com/dlehdgk/cosmctools.git
-uv add --editable ./cosmctools
+git clone https://github.com/dlehdgk/CosmoCAT.git
+uv add --editable ./CosmoCAT
 ```
 
 It is recommended that you install this package in editable mode as you may wish to modify the code for your specific choice of models and datasets.
@@ -67,7 +69,7 @@ You must run `set_sampled_params()` prior to attempting to obtain bayesian evide
 ## Example
 
 ```python
-from cosmctools import *
+from cosmocat import *
 
 # optional argument block_num used to split the MCMC chains into smaller blocks when using harmonic to estimate evidence
 

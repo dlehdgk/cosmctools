@@ -6,7 +6,7 @@ import harmonic as hm
 import harmonic.utils as utils
 import yaml
 from flax import serialization
-from cosmctools.mcevidence.Cobaya_wrapper import *
+from cosmocat.mcevidence.Cobaya_wrapper import *
 
 
 class cosmo_model:

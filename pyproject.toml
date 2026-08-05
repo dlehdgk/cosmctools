@@ -1,7 +1,7 @@
 [project]
-name = "cosmctools"
+name = "cosmocat"
 version = "0.1.0"
-description = "Tools library for extracting information from cosmological MCMC chains sampled with Cobaya."
+description = "Cosmological Chain Analysis Tools (CosmoCAT) is a tools library for extracting information from cosmological MCMC chains sampled with Cobaya."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
